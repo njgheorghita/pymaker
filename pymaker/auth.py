@@ -20,6 +20,11 @@ from web3 import Web3
 from pymaker import Contract, Address, Transact
 from pymaker.util import int_to_bytes32
 
+import json
+from pathlib import Path
+from ethpm import Package
+from eth_utils import is_address
+# from web3.tools import Deployer
 
 class DSGuard(Contract):
     """A client for the `DSGuard` contract.
@@ -32,10 +37,8 @@ class DSGuard(Contract):
         address: Ethereum address of the `DSGuard` contract.
     """
 
-    abi = Contract._load_abi(__name__, 'abi/DSGuard.abi')
-    bin = Contract._load_bin(__name__, 'abi/DSGuard.bin')
-
     ANY = int_to_bytes32(2 ** 256 - 1)
+    MANIFEST_PATH = Path(__file__).parent / 'abi' / 'ds-guard.json'
 
     def __init__(self, web3: Web3, address: Address):
         assert(isinstance(web3, Web3))
@@ -43,11 +46,20 @@ class DSGuard(Contract):
 
         self.web3 = web3
         self.address = address
+        package = Package.from_file(MANIFEST_PATH, web3)
+        factory = package.get_contract_factory('DSGuard')
+        self.abi = factory.abi
+        self.bin = factory.bytecode
         self._contract = self._get_contract(web3, self.abi, address)
 
     @staticmethod
     def deploy(web3: Web3):
-        return DSGuard(web3=web3, address=Contract._deploy(web3, DSGuard.abi, DSGuard.bin, []))
+        package = Package.from_file(MANIFEST_PATH, web3)
+        factory = package.get_contract_factory('DSGuard')
+        tx_hash = factory.constructor().transact()
+        tx_receipt = web3.eth.waitForTransactionReceipt(tx_hash)
+        address = Address(tx_receipt.contractAddress)
+        return DSGuard(web3=web3, address=address)
 
     def permit(self, src, dst, sig: bytes) -> Transact:
         """Grant access to a function call.
